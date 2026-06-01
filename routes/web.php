@@ -26,11 +26,20 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth'])->group(function () {
-    Route::get('/dashboard', function () {
-        return 'Bienvenido ' . auth()->user()->nombre . ' - Rol: ' . auth()->user()->rol->nombre_role;
-    })->name('dashboard');
     
-    // Aquí iremos agregando las rutas de tus vistas del Multichat más adelante
+    Route::get('/dashboard', function () {return 'Bienvenido ' . auth()->user()->nombre . ' - Rol: ' . auth()->user()->rol->nombre_role;
+    })->name('dashboard');
+    // Panel de Administrador
+    Route::prefix('admin')->name('admin.')->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
+        Route::resource('usuarios', App\Http\Controllers\Admin\UsuarioController::class);
+        Route::post('/usuarios/{id}/toggle', [App\Http\Controllers\Admin\UsuarioController::class, 'toggleActivo'])->name('usuarios.toggle');
+    });
+    
+    // Multichat (temporal)
+    Route::get('/multichat', function () {
+        return 'Panel de Multichat - Usuario: ' . auth()->user()->nombre;
+    })->name('multichat.index');
 });
 
 /*
