@@ -34,6 +34,12 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
         Route::resource('usuarios', App\Http\Controllers\Admin\UsuarioController::class);
         Route::post('/usuarios/{id}/toggle', [App\Http\Controllers\Admin\UsuarioController::class, 'toggleActivo'])->name('usuarios.toggle');
+        // Gestión de Cuentas Instagram
+        Route::get('/cuentas', [App\Http\Controllers\Admin\CuentaInstagramController::class, 'index'])->name('cuentas');
+        Route::get('/cuentas/conectar', [App\Http\Controllers\Admin\CuentaInstagramController::class, 'conectar'])->name('cuentas.conectar');
+        Route::get('/cuentas/callback', [App\Http\Controllers\Admin\CuentaInstagramController::class, 'callback'])->name('cuentas.callback');
+        Route::delete('/cuentas/{id}', [App\Http\Controllers\Admin\CuentaInstagramController::class, 'destroy'])->name('cuentas.destroy');
+        Route::post('/cuentas/{id}/reactivar', [App\Http\Controllers\Admin\CuentaInstagramController::class, 'reactivar'])->name('cuentas.reactivar');
     });
     
     // Multichat (temporal)

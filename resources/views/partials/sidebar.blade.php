@@ -28,7 +28,7 @@
                     </a>
                 </li>
                 <li class="nav-item mb-2">
-                    <a class="nav-link text-white" href="#">
+                    <a class="nav-link text-white" href="{{ route('admin.cuentas') }}">
                         <i class="fab fa-instagram me-2"></i> Cuentas IG
                     </a>
                 </li>
