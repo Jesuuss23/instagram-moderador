@@ -32,6 +32,7 @@ Route::middleware(['auth'])->group(function () {
     })->name('dashboard');
     // Panel de Administrador
     Route::prefix('admin')->name('admin.')->group(function () {
+        Route::get('/estadisticas/actividad-semanal', [App\Http\Controllers\Admin\DashboardController::class, 'actividadSemanal']);
         Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
         Route::resource('usuarios', App\Http\Controllers\Admin\UsuarioController::class);
         Route::post('/usuarios/{id}/toggle', [App\Http\Controllers\Admin\UsuarioController::class, 'toggleActivo'])->name('usuarios.toggle');

@@ -11,47 +11,65 @@ use Illuminate\Support\Facades\Http;
 
 class WebhookHelper
 {
-public static function processMessage($event)
-{
-    try {
-        // 1. SI ES UN ECHO (Mensaje enviado por ti desde el panel o el cel), LO IGNORAMOS
-        if (isset($event['message']['is_echo']) && $event['message']['is_echo'] === true) {
-            Log::info('Webhook: Eco detectado e ignorado (Evita duplicar lo que tú envías).');
-            return;
-        }
-
-        // 2. SI ES UN EVENTO DE LECTURA (read), LO IGNORAMOS
-        if (isset($event['read'])) {
-            Log::info('Webhook: Confirmación de lectura ignorada.');
-            return;
-        }
-
-        // 3. SI ES UN EVENTO DE EDICIÓN O ESTADO (message_edit), LO IGNORAMOS
-        if (isset($event['message_edit'])) {
-            Log::info('Webhook: Evento message_edit ignorado.');
-            return;
-        }
-
-        // --- A partir de aquí tu código procesa SOLO los mensajes reales de los clientes ---
-        $senderId = $event['sender']['id'] ?? null;
-        $recipientId = $event['recipient']['id'] ?? null;
-        $timestamp = $event['timestamp'] ?? time() * 1000;
-        
-        if (!$senderId || !$recipientId) {
-            Log::warning('Evento de Webhook mal formado: faltan IDs estructurales', ['event' => $event]);
-            return;
-        }
-            
-            // 1. Buscar la cuenta de Instagram (la que recibe el mensaje)
-            $cuenta = CuentaInstagram::where('instagram_id_meta', $recipientId)->first();
-            
-            if (!$cuenta) {
-                Log::warning('Cuenta no encontrada', ['instagram_id' => $recipientId]);
+    public static function processMessage($event)
+    {
+        try {
+            // 1. SI ES UN EVENTO DE LECTURA (read), LO IGNORAMOS
+            if (isset($event['read'])) {
+                Log::info('Webhook: Confirmación de lectura ignorada.');
                 return;
             }
+
+            // 2. SI ES UN EVENTO DE EDICIÓN O ESTADO (message_edit), LO IGNORAMOS
+            if (isset($event['message_edit'])) {
+                Log::info('Webhook: Evento message_edit ignorado.');
+                return;
+            }
+
+            $senderId = $event['sender']['id'] ?? null;
+            $recipientId = $event['recipient']['id'] ?? null;
+            $timestamp = $event['timestamp'] ?? time() * 1000;
             
-            // 2. Buscar si el cliente ya existe en nuestra Base de Datos
-            $cliente = ClienteInstagram::where('id_meta_cliente', $senderId)->first();
+            if (!$senderId || !$recipientId) {
+                Log::warning('Evento de Webhook mal formado: faltan IDs estructurales', ['event' => $event]);
+                return;
+            }
+
+            // 3. DETECCIÓN DINÁMICA DE ECO (Sincronización bidireccional externa)
+            $esEco = isset($event['message']['is_echo']) && $event['message']['is_echo'] === true;
+
+            if ($esEco) {
+                // Si es un eco, significa que tú enviaste el mensaje desde Instagram oficial.
+                // Tu cuenta comercial es quien origina el evento (sender)
+                $cuenta = CuentaInstagram::where('instagram_id_meta', $senderId)->first();
+                
+                if (!$cuenta) {
+                    Log::info('Webhook: Eco ignorado porque el ID no coincide con ninguna cuenta local comercial.', ['sender_id' => $senderId]);
+                    return;
+                }
+
+                // El cliente de la conversación es el destinatario (recipient)
+                $idMetaClienteFinal = $recipientId;
+                $remitenteTipo = 'CUENTA'; // Se guarda como mensaje enviado por la empresa
+                
+                Log::info('Webhook: Sincronizando eco enviado desde fuera del Dashboard.');
+            } else {
+                // Flujo normal: Un cliente externo te escribe un mensaje a tu cuenta.
+                // Tu cuenta comercial es quien recibe el evento (recipient)
+                $cuenta = CuentaInstagram::where('instagram_id_meta', $recipientId)->first();
+                
+                if (!$cuenta) {
+                    Log::warning('Cuenta comercial no encontrada en la base de datos', ['instagram_id' => $recipientId]);
+                    return;
+                }
+
+                // El cliente de la conversación es quien lo origina (sender)
+                $idMetaClienteFinal = $senderId;
+                $remitenteTipo = 'CLIENTE'; // Se guarda como mensaje enviado por el cliente
+            }
+                
+            // 4. Buscar si el cliente ya existe en nuestra Base de Datos usando el ID del cliente final
+            $cliente = ClienteInstagram::where('id_meta_cliente', $idMetaClienteFinal)->first();
             
             // Si el cliente no existe, o si existe pero su username quedó como 'desconocido'
             if (!$cliente || $cliente->username_cliente === 'desconocido') {
@@ -63,7 +81,8 @@ public static function processMessage($event)
                 
                 try {
                     // Consultamos el perfil del cliente a Meta usando tu token eterno de página
-                    $profileResponse = Http::get("https://graph.facebook.com/v25.0/{$senderId}", [
+                    // Nota: Si es eco, se consulta por el ID del destinatario. Si es normal, por el remitente.
+                    $profileResponse = Http::get("https://graph.facebook.com/v25.0/{$idMetaClienteFinal}", [
                         'fields' => 'username,name,profile_pic',
                         'access_token' => $cuenta->access_token_page
                     ]);
@@ -74,7 +93,7 @@ public static function processMessage($event)
                         $nombreCompleto = $profileData['name'] ?? null;
                         $fotoUrl = $profileData['profile_pic'] ?? null;
                     } else {
-                        Log::warning('Meta no devolvió un perfil exitoso', ['response' => $profileResponse->json()]);
+                        Log::warning('Meta no devolvió un perfil exitoso para el cliente final', ['response' => $profileResponse->json()]);
                     }
                 } catch (\Exception $e) {
                     Log::error('Error consultando el perfil del cliente en Meta: ' . $e->getMessage());
@@ -82,7 +101,7 @@ public static function processMessage($event)
                 
                 // Creamos o actualizamos el cliente con los datos reales de Meta
                 $cliente = ClienteInstagram::updateOrCreate(
-                    ['id_meta_cliente' => $senderId],
+                    ['id_meta_cliente' => $idMetaClienteFinal],
                     [
                         'username_cliente' => $username,
                         'nombre_completo'  => $nombreCompleto,
@@ -91,7 +110,7 @@ public static function processMessage($event)
                 );
             }
             
-            // 3. Buscar o crear la conversación
+            // 5. Buscar o crear la conversación
             $conversacion = Conversacion::firstOrCreate(
                 [
                     'id_cuenta_ig' => $cuenta->id_cuenta_ig,
@@ -99,7 +118,7 @@ public static function processMessage($event)
                 ]
             );
             
-            // 4. Procesar el mensaje
+            // 6. Procesar el contenido del mensaje (Texto o Adjuntos)
             if (isset($event['message'])) {
                 $message = $event['message'];
                 $messageId = $message['mid'] ?? 'local_' . time();
@@ -123,12 +142,12 @@ public static function processMessage($event)
                     $mediaUrl = $attachment['payload']['url'] ?? null;
                 }
                 
-                // Guardar mensaje
-                Mensaje::create([
+                // Guardar mensaje con su procedencia real (CUENTA o CLIENTE)
+                $nuevoMensaje = Mensaje::create([
                     'id_conversacion' => $conversacion->id_conversacion,
                     'id_meta_mensaje' => $messageId,
-                    'remitente_tipo' => 'CLIENTE',
-                    'id_usuario_asesor' => null,
+                    'remitente_tipo' => $remitenteTipo,
+                    'id_usuario_asesor' => null, // null porque vino de la sincronización externa de Instagram
                     'tipo_contenido' => $tipoContenido,
                     'texto_mensaje' => $textoMensaje,
                     'media_url' => $mediaUrl,
@@ -141,14 +160,15 @@ public static function processMessage($event)
                     'updated_at' => now()
                 ]);
                 
-                Log::info('Mensaje guardado correctamente', [
+                Log::info('Mensaje guardado correctamente por sincronización de Webhook', [
                     'conversacion_id' => $conversacion->id_conversacion,
                     'cliente_username' => $cliente->username_cliente,
+                    'remitente_tipo' => $remitenteTipo,
                     'tipo' => $tipoContenido
                 ]);
             }
             
-            // 5. Procesar respuestas a historias (story_mention)
+            // 7. Procesar respuestas a historias (story_mention)
             if (isset($event['story_mention'])) {
                 Log::info('Story mention recibido', $event['story_mention']);
             }
