@@ -40,7 +40,7 @@
             @endif
             
             <li class="nav-item mb-2 mt-3">
-                <a class="nav-link text-white bg-primary" href="{{ route('multichat.index') }}">
+                <a class="nav-link text-white bg-primary" href="{{ route('multichat.index') }}" target="_blank">
                     <i class="fas fa-comments me-2"></i> Multichat
                 </a>
             </li>

@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Helpers\WebhookHelper;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,10 +43,14 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/cuentas/{id}/reactivar', [App\Http\Controllers\Admin\CuentaInstagramController::class, 'reactivar'])->name('cuentas.reactivar');
     });
     
-    // Multichat (temporal)
-    Route::get('/multichat', function () {
-        return 'Panel de Multichat - Usuario: ' . auth()->user()->nombre;
-    })->name('multichat.index');
+Route::prefix('multichat')->name('multichat.')->group(function () {
+    Route::get('/', [App\Http\Controllers\MultichatController::class, 'index'])->name('index');
+    Route::get('/conversaciones', [App\Http\Controllers\MultichatController::class, 'getConversaciones'])->name('conversaciones');
+    Route::get('/mensajes/{conversacionId}', [App\Http\Controllers\MultichatController::class, 'getMensajes']);
+    Route::post('/enviar', [App\Http\Controllers\MultichatController::class, 'enviarMensaje'])->name('enviar');
+    Route::post('/marcar-leido/{conversacionId}', [App\Http\Controllers\MultichatController::class, 'marcarLeido']);
+    Route::post('/enviar-imagen', [App\Http\Controllers\MultichatController::class, 'enviarImagen'])->name('enviar.imagen');
+});
 });
 
 /*
@@ -68,5 +73,14 @@ Route::get('/webhook-test', function (Request $request) {
 
 Route::post('/webhook-test', function (Request $request) {
     Log::info('POST recibido en web.php:', $request->all());
+
+    $payload = $request->all();
+    if (isset($payload['object']) && $payload['object'] === 'instagram') {
+        foreach ($payload['entry'] as $entry) {
+            foreach ($entry['messaging'] ?? [] as $messageEvent) {
+                WebhookHelper::processMessage($messageEvent);
+            }
+        }
+    }
     return response('EVENT_RECEIVED', 200);
 });

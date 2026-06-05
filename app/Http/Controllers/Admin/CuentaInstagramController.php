@@ -35,7 +35,8 @@ class CuentaInstagramController extends Controller
             'redirect_uri' => $redirectUri,
             'response_type'=> 'code',
             // SCOPES CORREGIDOS: Agregado instagram_manage_messages para poder controlar los chats
-            'scope'        => 'pages_show_list,pages_read_engagement,pages_manage_metadata,instagram_basic,instagram_manage_messages',
+            'scope'        => 'instagram_basic,instagram_manage_comments,instagram_manage_messages,pages_manage_metadata,pages_manage_posts,pages_messaging,pages_read_engagement,pages_show_list',
+            
             'auth_type'    => 'rerequest'
         ]);
         
