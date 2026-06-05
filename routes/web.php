@@ -32,6 +32,9 @@ Route::middleware(['auth'])->group(function () {
     })->name('dashboard');
     // Panel de Administrador
     Route::prefix('admin')->name('admin.')->group(function () {
+        // Estadísticas
+        Route::get('/estadisticas', [App\Http\Controllers\Admin\EstadisticasController::class, 'index'])->name('estadisticas');
+        Route::get('/estadisticas/cuenta/{cuentaId}', [App\Http\Controllers\Admin\EstadisticasController::class, 'getEstadisticas']);
         Route::get('/estadisticas/actividad-semanal', [App\Http\Controllers\Admin\DashboardController::class, 'actividadSemanal']);
         Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
         Route::resource('usuarios', App\Http\Controllers\Admin\UsuarioController::class);
